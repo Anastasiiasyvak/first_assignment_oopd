@@ -3,6 +3,7 @@
 #include <sstream>
 #include <vector>
 #include <stdexcept>
+#include <ctime>
 
 class FileHandler {
 public:
@@ -177,25 +178,17 @@ public:
     }
 };
 
-
-
-/**
- * @brief A class representing a ticket with booking information.
- *
- * This class encapsulates ticket details, such as passenger name, seat
- * number, flight information, and booking status.
- */
-
 class Ticket {
 private:
     std::string passengerName;
     int seatNumber;
     std::string flightInformation;
     bool bookingStatus;
+    int bookingID;
 
 public:
-    Ticket(const std::string& name, int seat, const std::string& flightInfo)
-            : passengerName(name), seatNumber(seat), flightInformation(flightInfo), bookingStatus(true) {}
+    Ticket(const std::string& name, int seat, const std::string& flightInfo, int bookingID)
+            : passengerName(name), seatNumber(seat), flightInformation(flightInfo), bookingStatus(true), bookingID(bookingID) {}
 
     int getSeatNumber() const {
         return seatNumber;
@@ -203,6 +196,15 @@ public:
 
     bool isBooked() const {
         return bookingStatus;
+    }
+
+    std::string getPassengerName() const {
+        return passengerName;
+    }
+
+
+    int getBookingID() const {
+        return bookingID;
     }
 
     void cancelBooking() {
@@ -225,16 +227,6 @@ public:
     }
 };
 
-
-/**
- * @brief A class representing an airline system with booking operations.
- *
- * This class encapsulates the interactions between airplanes, tickets, and
- * booking operations, providing a high-level interface for managing the
- * airline system.
- */
-
-
 class AirlineSystem {
 private:
     std::vector<Airplane> airplanes;
@@ -256,24 +248,44 @@ public:
         }
     }
 
-    void bookTicket(int airplaneIndex, const std::string& passengerName, int seatNumber) {
-        if (airplaneIndex >= 0 && airplaneIndex < airplanes.size()) {
+    void bookTicket(const std::string& date, const std::string& flightNumber, int seatNumber, const std::string& passengerName) {
+        int airplaneIndex = findAirplaneIndex(date, flightNumber);
+        if (airplaneIndex != -1) {
             Airplane& airplane = airplanes[airplaneIndex];
             if (airplane.bookSeat(seatNumber)) {
-                Ticket ticket(passengerName, seatNumber, "Flight Info"); // You can replace "Flight Info" with actual flight information.
+                int bookingID = generateBookingID();
+                std::string flightInfo = "Date: " + date + ", Flight Number: " + flightNumber + ", Price: " + std::to_string(airplane.getSeatPrice(seatNumber)) + "$";
+                Ticket ticket(passengerName, seatNumber, flightInfo, bookingID);
                 bookedTickets.push_back(ticket);
+                std::cout << "Confirmed with ID " << bookingID << std::endl;
             }
         } else {
-            std::cout << "Invalid airplane index." << std::endl;
+            std::cout << "Flight not found." << std::endl;
         }
     }
 
-    void returnTicket(int ticketIndex) {
-        if (ticketIndex >= 0 && ticketIndex < bookedTickets.size()) {
-            Ticket& ticket = bookedTickets[ticketIndex];
-            int seatNumber = ticket.isBooked() ? ticket.getSeatNumber() : -1;
-            if (seatNumber != -1) {
-                for (Airplane& airplane : airplanes) {
+    int findAirplaneIndex(const std::string& date, const std::string& flightNumber) const {
+        for (int i = 0; i < airplanes.size(); ++i) {
+            if (airplanes[i].getDate() == date && airplanes[i].getFlightNumber() == flightNumber) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    int generateBookingID() const {
+        std::time_t currentTime = std::time(nullptr);
+        int uniqueID = static_cast<int>(currentTime);
+        uniqueID += rand() % 1000;
+
+        return uniqueID;
+    }
+
+    void returnTicket(int bookingID) {
+        for (auto& ticket : bookedTickets) {
+            if (ticket.isBooked() && ticket.getBookingID() == bookingID) {
+                int seatNumber = ticket.getSeatNumber();
+                for (auto& airplane : airplanes) {
                     if (airplane.checkSeatAvailability(seatNumber)) {
                         airplane.bookSeat(seatNumber);
                         ticket.cancelBooking();
@@ -281,18 +293,28 @@ public:
                         return;
                     }
                 }
-            } else {
-                std::cout << "Invalid seat number for the returned ticket." << std::endl;
             }
-        } else {
-            std::cout << "Invalid ticket index." << std::endl;
         }
+        std::cout << "Invalid booking ID for the returned ticket." << std::endl;
     }
 
     void viewBookedTickets() const {
         std::cout << "Booked Tickets:" << std::endl;
         for (const Ticket& ticket : bookedTickets) {
             ticket.viewTicketInfo();
+        }
+    }
+
+    const std::vector<Ticket>& getBookedTickets() const {
+        return bookedTickets;
+    }
+
+    void viewBookedTicketsForUser(const std::string& username) const {
+        std::cout << "Booked Tickets for User " << username << ":" << std::endl;
+        for (const Ticket& ticket : bookedTickets) {
+            if (ticket.isBooked() && ticket.getPassengerName() == username) {
+                ticket.viewTicketInfo();
+            }
         }
     }
 };
@@ -306,13 +328,19 @@ int main() {
         std::vector<Airplane> airplanes = ConfigReader::readConfig(fileLines);
         // Initialize the airline system
         AirlineSystem airlineSystem(airplanes);
+        srand(static_cast<unsigned>(time(0))); // Ініціалізуємо генератор випадкових чисел
+
 
         // Command-line interface
         std::string choice;
         do {
-            std::cout << "check. Check Flight Availability\n0. Exit\n";
+            std::cout << "check. Check Flight Availability\n"
+                      << "book. Book a Ticket\n"
+                      << "return. Return a Ticket\n"
+                      << "0. Exit\n";
             std::cout << "Enter your choice: ";
             std::cin >> choice;
+
 
             if (choice == "check") {
                 std::string date, flightNumber;
@@ -329,17 +357,68 @@ int main() {
                 }
 
                 if (airplaneIndex != -1) {
-                    const Airplane& airplane = airplanes[airplaneIndex];
+                    const Airplane &airplane = airplanes[airplaneIndex];
                     std::vector<int> availableSeats = airplane.getAvailableSeats();
                     std::cout << "Available Seats for Flight " << flightNumber << " on " << date << ":" << std::endl;
-                    for (int seat : availableSeats) {
+                    for (int seat: availableSeats) {
                         std::cout << seat << " " << airplane.getSeatPrice(seat) << "$, ";
                     }
                     std::cout << std::endl;
                 } else {
                     std::cout << "Flight not found." << std::endl;
                 }
-            } else if (choice == "0") {
+
+            } else if (choice == "book") {
+                std::string date, flightNumber, username;
+                int seatNumber;
+
+                std::cout << "Enter date, flight number, seat number, and username: ";
+                std::cin >> date >> flightNumber >> seatNumber >> username;
+
+                airlineSystem.bookTicket(date, flightNumber, seatNumber, username);
+
+
+            } else if (choice == "return") {
+                int bookingID;
+                std::cout << "Enter the index of the ticket to return: ";
+                std::cin >> bookingID;
+
+                airlineSystem.returnTicket(bookingID);
+            }
+
+            else if (choice == "viewUsername") {
+                std::string username;
+                std::cout << "Enter the username to view booked tickets: ";
+                std::cin >> username;
+
+                airlineSystem.viewBookedTicketsForUser(username);
+            }
+
+
+            else if (choice == "viewID") {
+                int bookingID;
+                std::cout << "Enter the booking ID to view ticket information: ";
+                std::cin >> bookingID;
+
+                // Find the booked ticket with the given ID
+                bool found = false;
+                for (const Ticket& ticket : airlineSystem.getBookedTickets()) {
+                    if (ticket.isBooked() && ticket.getBookingID() == bookingID) {
+                        ticket.viewTicketInfo();
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    std::cout << "Ticket with ID " << bookingID << " not found." << std::endl;
+                }
+            }
+
+
+
+
+            else if (choice == "0") {
                 std::cout << "Exiting the program.\n";
             } else {
                 std::cout << "Invalid choice. Please try again.\n";
