@@ -1,68 +1,28 @@
-//#include <iostream>
-//#include <fstream>
-//#include <string>
-//#include <sstream>
-//#include <random>
-//
-//std::string generateRandomDate() {
-//    std::random_device rd;
-//    std::mt19937 gen(rd());
-//    std::uniform_int_distribution<> year(2022, 2023);
-//    std::uniform_int_distribution<> month(1, 12);
-//    std::uniform_int_distribution<> day(1, 28);
-//
-//    std::stringstream date;
-//    date << day(gen) << "." << month(gen) << "." << year(gen);
-//    return date.str();
-//}
-//
-//std::string generateFlightData(int i) {
-//    std::stringstream data;
-//    data << "Flight" << i + 1 << "\n";
-//    data << generateRandomDate() << "\n";
-//    data << "FL" << i + 1 << "H" << (rand() % 90 + 10) << "\n";
-//    data << (rand() % 5 + 6) << "\n";
-//
-//    for (int j = 1; j < 20; j += 10) {
-//        data << j << "-" << (j + 10) << " " << (rand() % 100 + 50) << "$ ";
-//    }
-//    data << "\n";
-//
-//    return data.str();
-//}
-//
-//int main() {
-//    srand(static_cast<unsigned int>(time(0)));
-//
-//    std::ofstream file("PlaneData.txt");
-//    if (file.is_open()) {
-//        for (int i = 0; i < 89; ++i) {
-//            std::string flightData = generateFlightData(i);
-//            file << flightData << "//\n";
-//        }
-//        file.close();
-//        std::cout << "File created successfully." << std::endl;
-//    } else {
-//        std::cerr << "Unable to create file." << std::endl;
-//    }
-//
-//    return 0;
-//}
-
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <vector>
 
 class Airplane {
 private:
-    int numberOfSeats; // кількість місць
-    std::vector<bool> seatAvailability; // статус місця, воно або зайняте або ні (true or false)
+    int numberOfSeats;
+    std::vector<bool> seatAvailability;
+    std::vector<std::pair<int, int>> seatPrices;
 
 public:
-    Airplane(int seats) : numberOfSeats(seats), seatAvailability(seats, true) {
-        // Конструктор для ініціалізації кількості місць та доступності
+    Airplane(int seats) : numberOfSeats(seats), seatAvailability(seats, true) {}
+
+
+    void setNumberOfSeats(int seats) {
+        numberOfSeats = seats;
+        seatAvailability.assign(seats, true);
     }
 
-    bool checkSeatAvailability(int seatNumber) const { // перевіряється доступність місця
+    void setSeatPrices(const std::vector<std::pair<int, int>>& prices) {
+        seatPrices = prices;
+    }
+
+    bool checkSeatAvailability(int seatNumber) const {
         if (seatNumber > 0 && seatNumber <= numberOfSeats) {
             return seatAvailability[seatNumber - 1];
         } else {
@@ -71,7 +31,7 @@ public:
         }
     }
 
-    bool bookSeat(int seatNumber) { // забронювати місце
+    bool bookSeat(int seatNumber) {
         if (checkSeatAvailability(seatNumber)) {
             seatAvailability[seatNumber - 1] = false;
             std::cout << "Seat " << seatNumber << " booked successfully." << std::endl;
@@ -81,7 +41,6 @@ public:
             return false;
         }
     }
-
 
     void viewAirplaneInfo() const {
         std::cout << "Airplane Information: Total Seats: " << numberOfSeats << std::endl;
@@ -103,7 +62,54 @@ public:
         }
         return availableSeats;
     }
+
+    int getSeatPrice(int seatNumber) const {
+        for (const auto& pair : seatPrices) {
+            if (seatNumber >= pair.first && seatNumber <= pair.second) {
+                return pair.second;
+            }
+        }
+        return 0;
+    }
 };
+
+class ConfigReader {
+public:
+    static std::vector<Airplane> readConfig(const std::string& filename) {
+        std::vector<Airplane> airplanes;
+
+        std::ifstream file(filename);
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open file " << filename << std::endl;
+            return airplanes;
+        }
+
+        std::string line;
+        while (std::getline(file, line)) {
+            std::stringstream ss(line);
+            int seats;
+            std::string date, flightNumber;
+            ss >> date >> flightNumber >> seats;
+
+            Airplane airplane(seats);
+
+            std::vector<std::pair<int, int>> seatPrices;
+            while (ss >> seats) {
+                char dash;
+                int price;
+                ss >> dash >> price;
+                seatPrices.emplace_back(seats, price);
+            }
+
+            airplane.setSeatPrices(seatPrices);
+            airplanes.push_back(airplane);
+        }
+
+        file.close();
+        return airplanes;
+    }
+};
+
 
 
 
@@ -143,3 +149,17 @@ public:
         std::cout << "Passenger name changed to " << newName << "." << std::endl;
     }
 };
+
+
+int main() {
+    // Зчитування конфігурації з файлу
+    std::vector<Airplane> airplanes = ConfigReader::readConfig("/home/nastia/CLionProjects/first_homework_oopd/Data.txt");
+
+    // Виведення інформації про всі рейси
+    for (const auto& airplane : airplanes) {
+        airplane.viewAirplaneInfo();
+        std::cout << std::endl;
+    }
+
+    return 0;
+}
